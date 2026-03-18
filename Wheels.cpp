@@ -1,16 +1,12 @@
 #include <Arduino.h>
+
 #include "Wheels.h"
 
-#define SET_MOVEMENT(side,f,b) digitalWrite(side[0], f); \
-                               digitalWrite(side[1], b)
 
-// parametry robota (DOSTOSUJ!)
-#define PULSES_PER_ROTATION 20
-#define WHEEL_DIAMETER 6.5   // cm
+#define SET_MOVEMENT(side,f,b) digitalWrite( side[0], f);\
+                               digitalWrite( side[1], b)
 
-// zmienne enkoderów (z .ino)
-extern volatile long encoderLeft;
-extern volatile long encoderRight;
+#define TIME_PER_CM 100                          
 
 Wheels::Wheels() 
 { }
@@ -20,43 +16,42 @@ void Wheels::attachRight(int pF, int pB, int pS)
     pinMode(pF, OUTPUT);
     pinMode(pB, OUTPUT);
     pinMode(pS, OUTPUT);
-
-    pinsRight[0] = pF;
-    pinsRight[1] = pB;
-    pinsRight[2] = pS;
+    this->pinsRight[0] = pF;
+    this->pinsRight[1] = pB;
+    this->pinsRight[2] = pS;
 }
+
 
 void Wheels::attachLeft(int pF, int pB, int pS)
 {
     pinMode(pF, OUTPUT);
     pinMode(pB, OUTPUT);
     pinMode(pS, OUTPUT);
-
-    pinsLeft[0] = pF;
-    pinsLeft[1] = pB;
-    pinsLeft[2] = pS;
-}
-
-void Wheels::attach(int pRF, int pRB, int pRS, int pLF, int pLB, int pLS)
-{
-    attachRight(pRF, pRB, pRS);
-    attachLeft(pLF, pLB, pLS);
+    this->pinsLeft[0] = pF;
+    this->pinsLeft[1] = pB;
+    this->pinsLeft[2] = pS;
 }
 
 void Wheels::setSpeedRight(uint8_t s)
 {
-    analogWrite(pinsRight[2], s);
+    analogWrite(this->pinsRight[2], s);
 }
 
 void Wheels::setSpeedLeft(uint8_t s)
 {
-    analogWrite(pinsLeft[2], s);
+    analogWrite(this->pinsLeft[2], s);
 }
 
 void Wheels::setSpeed(uint8_t s)
 {
     setSpeedLeft(s);
     setSpeedRight(s);
+}
+
+void Wheels::attach(int pRF, int pRB, int pRS, int pLF, int pLB, int pLS)
+{
+    this->attachRight(pRF, pRB, pRS);
+    this->attachLeft(pLF, pLB, pLS);
 }
 
 void Wheels::forwardLeft() 
@@ -81,14 +76,14 @@ void Wheels::backRight()
 
 void Wheels::forward()
 {
-    forwardLeft();
-    forwardRight();
+    this->forwardLeft();
+    this->forwardRight();
 }
 
 void Wheels::back()
 {
-    backLeft();
-    backRight();
+    this->backLeft();
+    this->backRight();
 }
 
 void Wheels::stopLeft()
@@ -103,48 +98,23 @@ void Wheels::stopRight()
 
 void Wheels::stop()
 {
-    stopLeft();
-    stopRight();
+    this->stopLeft();
+    this->stopRight();
 }
-
-/*
- * NOWE METODY – na podstawie enkoderów
- */
 
 void Wheels::goForward(int cm)
 {
-    float wheelCirc = 3.1416 * WHEEL_DIAMETER;
-    float rotations = cm / wheelCirc;
-    long targetPulses = rotations * PULSES_PER_ROTATION;
+    int t=cm * TIME_PER_CM;
 
-    encoderLeft = 0;
-    encoderRight = 0;
-
-    forward();
-
-    while(encoderLeft < targetPulses && encoderRight < targetPulses)
-    {
-        // czekamy na impulsy
-    }
-
-    stop();
+    this->forward();
+    delay(t);
+    this->stop();
 }
 
 void Wheels::goBack(int cm)
 {
-    float wheelCirc = 3.1416 * WHEEL_DIAMETER;
-    float rotations = cm / wheelCirc;
-    long targetPulses = rotations * PULSES_PER_ROTATION;
-
-    encoderLeft = 0;
-    encoderRight = 0;
-
-    back();
-
-    while(encoderLeft < targetPulses && encoderRight < targetPulses)
-    {
-        // czekamy
-    }
-
-    stop();
+    int t=cm * TIME_PER_CM;
+    this->forward();
+    delay(t);
+    this->stop();
 }
