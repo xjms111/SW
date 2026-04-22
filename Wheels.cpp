@@ -1,45 +1,53 @@
 #include <Arduino.h>
-
 #include "Wheels.h"
 
+#define SET_MOVEMENT(side,f,b) digitalWrite(side[0], f); \
+                               digitalWrite(side[1], b)
 
-#define SET_MOVEMENT(side,f,b) digitalWrite( side[0], f);\
-                               digitalWrite( side[1], b)
+#define TIME_PER_CM 100
 
-#define TIME_PER_CM 100                          
+extern void aktualizujLCD(int pozostalo, int mocL, int mocP);
+extern void startBeep(long period);
+extern void stopBeep();
 
-Wheels::Wheels() 
-{ }
+Wheels::Wheels() {}
 
 void Wheels::attachRight(int pF, int pB, int pS)
 {
     pinMode(pF, OUTPUT);
     pinMode(pB, OUTPUT);
     pinMode(pS, OUTPUT);
-    this->pinsRight[0] = pF;
-    this->pinsRight[1] = pB;
-    this->pinsRight[2] = pS;
+    pinsRight[0] = pF;
+    pinsRight[1] = pB;
+    pinsRight[2] = pS;
 }
-
 
 void Wheels::attachLeft(int pF, int pB, int pS)
 {
     pinMode(pF, OUTPUT);
     pinMode(pB, OUTPUT);
     pinMode(pS, OUTPUT);
-    this->pinsLeft[0] = pF;
-    this->pinsLeft[1] = pB;
-    this->pinsLeft[2] = pS;
+    pinsLeft[0] = pF;
+    pinsLeft[1] = pB;
+    pinsLeft[2] = pS;
+}
+
+void Wheels::attach(int pRF, int pRB, int pRS, int pLF, int pLB, int pLS)
+{
+    attachRight(pRF, pRB, pRS);
+    attachLeft(pLF, pLB, pLS);
 }
 
 void Wheels::setSpeedRight(uint8_t s)
 {
-    analogWrite(this->pinsRight[2], s);
+    speedRight = s;
+    analogWrite(pinsRight[2], s);
 }
 
 void Wheels::setSpeedLeft(uint8_t s)
 {
-    analogWrite(this->pinsLeft[2], s);
+    speedLeft = s;
+    analogWrite(pinsLeft[2], s);
 }
 
 void Wheels::setSpeed(uint8_t s)
@@ -48,73 +56,51 @@ void Wheels::setSpeed(uint8_t s)
     setSpeedRight(s);
 }
 
-void Wheels::attach(int pRF, int pRB, int pRS, int pLF, int pLB, int pLS)
-{
-    this->attachRight(pRF, pRB, pRS);
-    this->attachLeft(pLF, pLB, pLS);
-}
+void Wheels::forwardLeft() { SET_MOVEMENT(pinsLeft, HIGH, LOW); }
+void Wheels::forwardRight() { SET_MOVEMENT(pinsRight, HIGH, LOW); }
+void Wheels::backLeft() { SET_MOVEMENT(pinsLeft, LOW, HIGH); }
+void Wheels::backRight() { SET_MOVEMENT(pinsRight, LOW, HIGH); }
 
-void Wheels::forwardLeft() 
-{
-    SET_MOVEMENT(pinsLeft, HIGH, LOW);
-}
+void Wheels::forward() { forwardLeft(); forwardRight(); }
+void Wheels::back() { backLeft(); backRight(); }
 
-void Wheels::forwardRight() 
-{
-    SET_MOVEMENT(pinsRight, HIGH, LOW);
-}
-
-void Wheels::backLeft()
-{
-    SET_MOVEMENT(pinsLeft, LOW, HIGH);
-}
-
-void Wheels::backRight()
-{
-    SET_MOVEMENT(pinsRight, LOW, HIGH);
-}
-
-void Wheels::forward()
-{
-    this->forwardLeft();
-    this->forwardRight();
-}
-
-void Wheels::back()
-{
-    this->backLeft();
-    this->backRight();
-}
-
-void Wheels::stopLeft()
-{
-    SET_MOVEMENT(pinsLeft, LOW, LOW);
-}
-
-void Wheels::stopRight()
-{
-    SET_MOVEMENT(pinsRight, LOW, LOW);
-}
-
-void Wheels::stop()
-{
-    this->stopLeft();
-    this->stopRight();
-}
+void Wheels::stopLeft() { SET_MOVEMENT(pinsLeft, LOW, LOW); }
+void Wheels::stopRight() { SET_MOVEMENT(pinsRight, LOW, LOW); }
+void Wheels::stop() { stopLeft(); stopRight(); }
 
 void Wheels::goForward(int cm)
 {
-    int t=cm * TIME_PER_CM;
+    unsigned long czasJazdy = cm * TIME_PER_CM;
+    unsigned long start = millis();
 
-    this->forward();
-    delay(t);
-    this->stop();
+    forward();
+
+    while (millis() - start < czasJazdy) {
+        int przejechane = (millis() - start) / TIME_PER_CM;
+        aktualizujLCD(cm - przejechane, speedLeft, speedRight);
+    }
+
+    stop();
+    aktualizujLCD(0,0,0);
 }
 
 void Wheels::goBack(int cm)
 {
-    int t=cm * TIME_PER_CM;
-    this->forward();
-    delay(t);
-    this->stop();
+    unsigned long czasJazdy = cm * TIME_PER_CM;
+    unsigned long start = millis();
+
+    // 🔥 częstotliwość zależna od prędkości
+    long okres = map(speedLeft, 0, 255, 800000, 200000);
+    startBeep(okres);
+
+    back();
+
+    while (millis() - start < czasJazdy) {
+        int przejechane = (millis() - start) / TIME_PER_CM;
+        aktualizujLCD(cm - przejechane, -speedLeft, -speedRight);
+    }
+
+    stop();
+    stopBeep();
+    aktualizujLCD(0,0,0);
 }
