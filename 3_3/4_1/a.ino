@@ -5,7 +5,7 @@
 #define BEEPER 13
 
 // Inicjalizacja LCD
-LiquidCrystal_I2C lcd(0x3f, 16, 2);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 Wheels w;
 volatile char cmd;
