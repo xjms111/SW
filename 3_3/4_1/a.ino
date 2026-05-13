@@ -92,7 +92,7 @@ void setup() {
   aktualizujLCD(0, 0, 0);
 
   // Konfiguracja pinów silników
-  w.attach(7, 12, 3, 9, 11, 5);
+  w.attach(12,11, 6,7,8,5);
 
   // BEEPER
   pinMode(BEEPER, OUTPUT);
