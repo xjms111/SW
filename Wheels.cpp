@@ -1,53 +1,62 @@
+#include "HardwareSerial.h"
 #include <Arduino.h>
+
 #include "Wheels.h"
+#include "Blinker.h"
+#include "SpeedSensor.h"
 
-#define SET_MOVEMENT(side,f,b) digitalWrite(side[0], f); \
-                               digitalWrite(side[1], b)
 
-#define TIME_PER_CM 100
+#define SET_MOVEMENT(side,f,b) digitalWrite( side[0], f);\
+                               digitalWrite( side[1], b)
 
-extern void aktualizujLCD(int pozostalo, int mocL, int mocP);
-extern void startBeep(long period);
-extern void stopBeep();
+Wheels::Wheels() 
+{ 
+    distanceTravelled = 0;
+}
 
-Wheels::Wheels() {}
+bool Wheels::getForw() {
+    return this->forw;
+}
 
 void Wheels::attachRight(int pF, int pB, int pS)
 {
     pinMode(pF, OUTPUT);
     pinMode(pB, OUTPUT);
     pinMode(pS, OUTPUT);
-    pinsRight[0] = pF;
-    pinsRight[1] = pB;
-    pinsRight[2] = pS;
+    this->pinsRight[0] = pF;
+    this->pinsRight[1] = pB;
+    this->pinsRight[2] = pS;
 }
+
 
 void Wheels::attachLeft(int pF, int pB, int pS)
 {
     pinMode(pF, OUTPUT);
     pinMode(pB, OUTPUT);
     pinMode(pS, OUTPUT);
-    pinsLeft[0] = pF;
-    pinsLeft[1] = pB;
-    pinsLeft[2] = pS;
-}
-
-void Wheels::attach(int pRF, int pRB, int pRS, int pLF, int pLB, int pLS)
-{
-    attachRight(pRF, pRB, pRS);
-    attachLeft(pLF, pLB, pLS);
+    this->pinsLeft[0] = pF;
+    this->pinsLeft[1] = pB;
+    this->pinsLeft[2] = pS;
 }
 
 void Wheels::setSpeedRight(uint8_t s)
 {
+    analogWrite(this->pinsRight[2], s);
     speedRight = s;
-    analogWrite(pinsRight[2], s);
+}
+
+int Wheels::getSpeedRight(){
+    return this->speedRight;
 }
 
 void Wheels::setSpeedLeft(uint8_t s)
 {
+    analogWrite(this->pinsLeft[2], s);
     speedLeft = s;
-    analogWrite(pinsLeft[2], s);
+}
+
+int Wheels::getSpeedLeft(){
+    return this->speedLeft;
 }
 
 void Wheels::setSpeed(uint8_t s)
@@ -56,51 +65,166 @@ void Wheels::setSpeed(uint8_t s)
     setSpeedRight(s);
 }
 
-void Wheels::forwardLeft() { SET_MOVEMENT(pinsLeft, HIGH, LOW); }
-void Wheels::forwardRight() { SET_MOVEMENT(pinsRight, HIGH, LOW); }
-void Wheels::backLeft() { SET_MOVEMENT(pinsLeft, LOW, HIGH); }
-void Wheels::backRight() { SET_MOVEMENT(pinsRight, LOW, HIGH); }
+void Wheels::attach(int pRF, int pRB, int pRS, int pLF, int pLB, int pLS)
+{
+    this->attachRight(pRF, pRB, pRS);
+    this->attachLeft(pLF, pLB, pLS);
+}
 
-void Wheels::forward() { forwardLeft(); forwardRight(); }
-void Wheels::back() { backLeft(); backRight(); }
+void Wheels::forwardLeft() 
+{
+    SET_MOVEMENT(pinsLeft, HIGH, LOW);
+}
 
-void Wheels::stopLeft() { SET_MOVEMENT(pinsLeft, LOW, LOW); }
-void Wheels::stopRight() { SET_MOVEMENT(pinsRight, LOW, LOW); }
-void Wheels::stop() { stopLeft(); stopRight(); }
+void Wheels::forwardRight() 
+{
+    SET_MOVEMENT(pinsRight, HIGH, LOW);
+}
+
+void Wheels::backLeft()
+{
+    SET_MOVEMENT(pinsLeft, LOW, HIGH);
+}
+
+void Wheels::backRight()
+{
+    SET_MOVEMENT(pinsRight, LOW, HIGH);
+}
+
+void Wheels::forward()
+{
+    this->forwardLeft();
+    this->forwardRight();
+}
+
+void Wheels::back()
+{
+    this->backLeft();
+    this->backRight();
+    long int tmp = this->getPeriod();
+    Serial.println("pikam");
+    Blinker::start(tmp);
+    Serial.println("pikam");
+    Serial.println(tmp);
+}
+
+void Wheels::stopLeft()
+{
+    SET_MOVEMENT(pinsLeft, LOW, LOW);
+    speedLeft = 0;
+}
+
+void Wheels::stopRight()
+{
+    SET_MOVEMENT(pinsRight, LOW, LOW);
+    speedRight = 0;
+}
+
+void Wheels::stop()
+{
+    this->stopLeft();
+    this->stopRight();
+    Blinker::stop();
+}
+
+
+
+
+void Wheels::moveStep() {
+    if(!moving) {
+        return;
+    }
+    if(startRequest){
+        //this->setSpeed(130);
+        if(forw){
+            this->forward();
+        } else {
+            this->back();
+        }
+        startRequest = false;
+        startTime = millis();
+    }
+    
+    if(SpeedSensor::getCnts() >= distance*4) {
+        moving = false;
+        distanceTravelled = 0;
+        distance = 0;
+        this->stop();
+        SpeedSensor::reset();
+        dur=(millis()-startTime);
+
+    }else{  
+        distanceTravelled = SpeedSensor::getCnts()/4; 
+    }
+}
+
+void Wheels::turnStep(){
+    if(!turning){
+        return;
+    }
+    if(turnRequest){
+        Serial.println("req acc");
+        Serial.println(SpeedSensor::getCnts());
+        this->setSpeed(180);
+        if(left){
+            forwardRight();
+            backLeft();
+        } else {
+            forwardLeft();
+            backRight();
+        }
+        turnRequest = false;
+    }
+    if(SpeedSensor::getCnts()>=degrees*0.77){
+        Serial.println(SpeedSensor::getCnts());
+        Serial.println("ending");
+        turning = false;
+        this->stop();
+        SpeedSensor::reset();
+    }
+}
 
 void Wheels::goForward(int cm)
 {
-    unsigned long czasJazdy = cm * TIME_PER_CM;
-    unsigned long start = millis();
-
-    forward();
-
-    while (millis() - start < czasJazdy) {
-        int przejechane = (millis() - start) / TIME_PER_CM;
-        aktualizujLCD(cm - przejechane, speedLeft, speedRight);
-    }
-
-    stop();
-    aktualizujLCD(0,0,0);
+    moving = true;
+    startRequest = true;
+    forw = true;
+    distance = cm;
 }
 
 void Wheels::goBack(int cm)
 {
-    unsigned long czasJazdy = cm * TIME_PER_CM;
-    unsigned long start = millis();
-
-    // 🔥 częstotliwość zależna od prędkości
-    long okres = map(speedLeft, 0, 255, 800000, 200000);
-    startBeep(okres);
-
-    back();
-
-    while (millis() - start < czasJazdy) {
-        int przejechane = (millis() - start) / TIME_PER_CM;
-        aktualizujLCD(cm - przejechane, -speedLeft, -speedRight);
-    }
-
-    stop();
-    stopBeep();
-    aktualizujLCD(0,0,0);
+    moving = true;
+    startRequest = true;
+    forw = false;
+    distance = cm;
 }
+
+bool Wheels::getMoving(){
+    return this->moving;
+}
+
+long int Wheels::getPeriod() {
+  long int f_min = 300000;
+  long int f_max = 1000000;
+  float Vmax = 255.0;
+  float res = f_max - (f_max - f_min) * (this->speedLeft / Vmax);
+  Serial.println(res);
+  return res;
+}
+
+void Wheels::turnLeft(int deg){
+    turning = true;
+    turnRequest = true;
+    left = true;
+    degrees = deg;
+}
+
+void Wheels::turnRight(int deg){
+    turning = true;
+    turnRequest = true;
+    left = false;
+    degrees = deg;
+}
+
+
