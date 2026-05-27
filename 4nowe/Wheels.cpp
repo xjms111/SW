@@ -80,7 +80,7 @@ void Wheels::goForward(int cm) { moving = true; startRequest = true; forw = true
 void Wheels::goBack(int cm) { moving = true; startRequest = true; forw = false; distance = cm; }
 bool Wheels::getMoving() { return this->moving; }
 
-// Nowe funkcje zwracające stan skrętu
+
 bool Wheels::getTurning() { return this->turning; }
 bool Wheels::getLeft() { return this->left; }
 
