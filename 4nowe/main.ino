@@ -158,7 +158,7 @@ void startLineAnimation(bool forwardDirection) {
 
 
 void setup() {
-  w.attach(12, 11, 6, 7, 8, 5); 
+  w.attach(7,8,5,12,11,6);
   Serial.begin(9600);
   
   lcd.init();
