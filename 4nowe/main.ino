@@ -9,14 +9,12 @@ LiquidCrystal_I2C lcd(LCDAddress, 16, 2);
 Wheels w;
 volatile char cmd;
 
-// Zmienne do automatycznej sekwencji ruchu (Z kodu kolegi)
+// Zmienne do automatycznej sekwencji ruchu
 unsigned long lastMove = 0;
 unsigned long interval = 4000; // Czas (w ms) na wykonanie jednego kroku (np. 4 sekundy)
 int fr = 0;
 
-// ==========================================
-// KLASA TICKER
-// ==========================================
+//sprawdzanie czasu
 class Ticker {
   private: 
     unsigned long period;
@@ -35,9 +33,7 @@ class Ticker {
     }
 };
 
-// ==========================================
-// GRAFIKA PIXEL-ART I ZMIENNE LCD
-// ==========================================
+
 int lastSpeedLeft = 0;
 int lastSpeedRight = 0;
 int lastDist = 0;
@@ -51,9 +47,7 @@ uint8_t arrowRight[8] = { 0b01000, 0b00100, 0b00010, 0b11111, 0b00010, 0b00100, 
 uint8_t frame[8];
 uint8_t current[8];
 
-// ==========================================
-// TICKER 1: Wyświetlanie statusu / odliczania dystansu
-// ==========================================
+//górna linijka lcd
 void an() {
   if (w.getMoving()) {
     int tmp = w.distance - w.distanceTravelled;
@@ -79,9 +73,7 @@ void an() {
   }
 }
 
-// ==========================================
-// TICKER 2: Dynamiczne znaki prędkości (Zadanie 2)
-// ==========================================
+//wyświetlanie prędkości silników
 void speedChange() {
   int sl = 0;
   int sr = 0;
@@ -111,9 +103,7 @@ void speedChange() {
   }
 }
 
-// ==========================================
-// TICKER 3: Animacja strzałek środkowych
-// ==========================================
+// Animacja strzałek środkowych
 void shiftUp(uint8_t *src, uint8_t *dest) {
   for (int i = 0; i < 7; i++) dest[i] = src[i + 1];
   dest[7] = src[0]; 
@@ -123,6 +113,7 @@ void shiftDown(uint8_t *src, uint8_t *dest){
   dest[0] = src[7];
 }
 
+//wybór kierunku strzałek
 void animation(){
   lcd.setCursor(7, 1);
   
@@ -165,9 +156,7 @@ void startLineAnimation(bool forwardDirection) {
   }
 }
 
-// ==========================================
-// SETUP I LOOP
-// ==========================================
+
 void setup() {
   w.attach(12, 11, 6, 7, 8, 5); 
   Serial.begin(9600);
@@ -179,20 +168,19 @@ void setup() {
   SpeedSensor::begin();
 
   w.setSpeed(150);
-  unsigned long startTimeout = 1000; // 10 sekund na odpięcie kabla i ucieczkę
+  unsigned long startTimeout = 1000; 
   lastMove = millis() + startTimeout;
   Serial.println("Robot gotowy. Uruchamiam automatyczną sekwencję...");
 }
 
 void loop() {
-  // 1. Wielozadaniowe tickery działające w tle
+  // tickery działające w tle
   ticker.check();
   w.moveStep();
   w.turnStep();
   speedTicker.check();
   animationTicker.check();
 
-  // 2. Automatyczna sekwencja z kodu kolegi (wywoływana co 'interval' milisekund)
   if(millis() - lastMove > interval){
     Serial.println("Uruchomienie kolejnego manewru automatycznego");
     switch(fr){
@@ -221,7 +209,7 @@ void loop() {
     lastMove = millis();
   }
 
-  // 3. Opcjonalne sterowanie z klawiatury (nadpisuje automatykę, jeśli klikniesz)
+  // 3 sterowanie z klawiatury
   if (Serial.available()) {
     cmd = Serial.read();
     switch (cmd) {
