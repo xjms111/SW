@@ -182,7 +182,7 @@ void setup() {
   Serial.begin(9600);
   
   // Inicjalizacja kół (Piny: R_forward, R_back, R_speed, L_forward, L_back, L_speed)
-  w.attach(12, 11, 6, 7, 8, 5);
+  w.attach(11, 12, 6, 8, 7, 5);
   Blinker::begin(13); // Głośnik na pinie 13
   SpeedSensor::begin();
   
@@ -207,7 +207,7 @@ void loop() {
   w.turnStep();
 
   // Automat sekwencyjny (taniec robota) - działa tylko gdy brak awarii sonaru
-  if(!obstacleDetected && (millis() - lastMove > interval)){
+  /*if(!obstacleDetected && (millis() - lastMove > interval)){
     switch(fr){
       case 0: w.turnLeft(90); break;
       case 1: w.setSpeed(130); w.goBack(50); startLineAnimation(false); break;
@@ -216,13 +216,13 @@ void loop() {
     }
     fr = (fr + 1) % 4;
     lastMove = millis();
-  }
+  }*/
 
   // Obsługa komend awaryjnych z Serial Monitora
   if (Serial.available()) {
     cmd = Serial.read();
     switch (cmd) {
-      case 'w': w.setSpeed(150); w.forward(); startLineAnimation(true); break;
+      case 'w': w.setSpeed(150); w.goForward(400); startLineAnimation(true); break;
       case 'x': w.setSpeed(150); w.back(); startLineAnimation(false); break;
       case 's': w.stop(); break;
     }
