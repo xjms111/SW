@@ -6,38 +6,27 @@
 #include "Blinker.h"
 #include "SpeedSensor.h"
 
-// Konfiguracja pinów sonaru i serwa (Bezpieczne piny)
+// Przypisanie pinów zgodnie z Twoim shieldem (zieloną płytką)
 #define TRIG 9
 #define ECHO 10
 #define SERVO 3
 
-// Inicjalizacja obiektów globalnych
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 Wheels w;
 Servo serwo;
 
-// Zmienne globalne dla obsługi ekranu i algorytmu
 int lastSpeedLeft = 0, lastSpeedRight = 0;
 int lastDist = 0, lastMode = -1; 
 unsigned long lastMove = 0;
-unsigned long interval = 4000; 
-int fr = 0; 
 char cmd;
 
-// Zmienne obsługi radaru (Serwo + Sonar) bez delay()
+// Obsługa radaru
 int radarAngle = 90;
-int radarDirection = 10; // Krok zmiany kąta (+10 lub -10)
+int radarDirection = 15; // Zwiększony krok dla żywszego omiatania
 bool obstacleDetected = false;
+unsigned int currentDist = 400;
 
-// Definicje własnych znaków (Strzałki do animacji)
-uint8_t arrowUp[8] = {0b00100, 0b01110, 0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100};
-uint8_t arrowDown[8] = {0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111, 0b01110, 0b00100};
-uint8_t arrowLeft[8] = {0b00010, 0b00100, 0b01000, 0b10000, 0b01000, 0b00100, 0b00010, 0b00000};
-uint8_t arrowRight[8] = {0b01000, 0b00100, 0b00010, 0b00001, 0b00010, 0b00100, 0b01000, 0b00000};
-uint8_t current[8];
-uint8_t frame[8];
-
-// Klasa Ticker (Programowy stoper)
+// Klasa Ticker do wielozadaniowości
 class Ticker {
   private: 
     unsigned long period;
@@ -52,93 +41,89 @@ class Ticker {
     }
 };
 
-// Deklaracje zapowiedzi funkcji
-void an();
+void updateLCD();
 void speedChange();
-void animation();
 void scanRadar();
 
-// Rejestracja stoperów
-Ticker ticker(32, an);
+Ticker ticker(100, updateLCD);     // Odświeżanie ekranu co 100ms
 Ticker speedTicker(32, speedChange);
-Ticker animationTicker(150, animation);
-Ticker radarTicker(80, scanRadar); // Zmiana kąta radaru co 80ms
+Ticker radarTicker(60, scanRadar);  // Skanowanie otoczenia co 60ms
 
-// Funkcje pomocnicze animacji matrycy
-void shiftUp(uint8_t *src, uint8_t *dst) { for(int i=0; i<7; i++) dst[i] = src[i+1]; dst[7] = src[0]; }
-void shiftDown(uint8_t *src, uint8_t *dst) { dst[0] = src[7]; for(int i=1; i<8; i++) dst[i] = src[i-1]; }
-void startLineAnimation(bool up) { memcpy(current, up ? arrowUp : arrowDown, 8); }
-
-// Funkcja pomiaru odległości sonaru
 unsigned int getSonarDistance() {
   digitalWrite(TRIG, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG, LOW);
-  unsigned long tot = pulseIn(ECHO, HIGH, 25000); // Timeout 25ms
+  unsigned long tot = pulseIn(ECHO, HIGH, 25000); 
   if (tot == 0) return 400; 
   return tot / 58;
 }
 
-// Funkcja asynchronicznego skanowania (Wywoływana przez radarTicker co 80ms)
 void scanRadar() {
-  serwo.write(radarAngle);
-  unsigned int currentDist = getSonarDistance();
+  if (obstacleDetected) return; // Jeśli trwa procedura omijania, zawieś wahadło
 
-  // Wysłanie danych do Narzędzia -> Kreślarka (Plotter)
+  serwo.write(radarAngle);
+  currentDist = getSonarDistance();
+
+  // Wysyłanie danych na Serial Plotter
   Serial.print("Angle:"); Serial.print(radarAngle); Serial.print(",");
   Serial.print("Distance:"); Serial.println(currentDist);
 
-  // Jeśli robot jedzie do przodu i wykryje przeszkodę bliżej niż 20cm na wprost (70-110 deg)
-  if (w.getMoving() && w.getForw() && radarAngle >= 70 && radarAngle <= 110 && currentDist < 20) {
-    w.stop(); // Natychmiastowe zatrzymanie silników i uciszenie beepera
+  // REAKCJA ANTYKOLIZYJNA: Robot jedzie w przód i widzi przeszkodę < 25cm na wprost (70-110 stopni)
+  if (w.getMoving() && w.getForw() && radarAngle >= 70 && radarAngle <= 110 && currentDist < 25) {
+    w.stop(); 
     obstacleDetected = true;
     
-    // Skanowanie decyzji (Sekwencja szybka sprzętowo)
-    serwo.write(30); delay(400); unsigned int leftSpace = getSonarDistance();
-    serwo.write(150); delay(400); unsigned int rightSpace = getSonarDistance();
-    serwo.write(90); // Powrót
+    // PUNKT: Podejmowanie decyzji (Skanowanie stron)
+    lcd.clear();
+    lcd.setCursor(0, 0); lcd.print("OBIEKT! SKANUJĘ");
+    
+    serwo.write(30); delay(500); unsigned int leftSpace = getSonarDistance();
+    serwo.write(150); delay(500); unsigned int rightSpace = getSonarDistance();
+    serwo.write(90); delay(200); // Powrót sonaru na wprost
     
     lcd.clear();
-    lcd.setCursor(0, 0); lcd.print("OBIEKT! HAMOWANIE");
-    lcd.setCursor(0, 1);
-    if(leftSpace > rightSpace) lcd.print("Droga: LEWO     ");
-    else lcd.print("Droga: PRAWO    ");
+    lcd.setCursor(0, 0); lcd.print("WYBRANA DROGA:");
     
-    lastMove = millis() + 2000; // Zablokuj automat na 2 sekundy, aby odczytać LCD
+    // PUNKT: Realizacja manewru ucieczki na podstawie decyzji
+    if(leftSpace > rightSpace) {
+      lcd.setCursor(0, 1); lcd.print(">>> LEWO <<<");
+      w.setSpeed(160);
+      w.turnLeft(60); // Fizyczny skręt w lewo o bezpieczny kąt
+    } else {
+      lcd.setCursor(0, 1); lcd.print(">>> PRAWO <<<");
+      w.setSpeed(160);
+      w.turnRight(60); // Fizyczny skręt w prawo
+    }
+    
+    lastMove = millis(); // Zapamiętaj czas rozpoczęcia skrętu
     return;
   }
 
-  // Aktualizacja kąta na następny cykl (wahadło 20 <-> 160 stopni)
+  // Ruch wahadłowy radaru
   radarAngle += radarDirection;
   if (radarAngle >= 160 || radarAngle <= 20) {
-    radarDirection = -radarDirection; // Odwrócenie kierunku obrotu serwa
+    radarDirection = -radarDirection; 
   }
 }
 
-// Odświeżanie górnej linii LCD
-void an() {
-  if (obstacleDetected) {
-    if (millis() - lastMove > 0) obstacleDetected = false; // Po czasie wyczyść stan alarmu
-    return;
-  }
+// PUNKT: Wyświetlanie danych z sonaru (Kąt i odległość) na LCD w czasie rzeczywistym
+void updateLCD() {
+  if (obstacleDetected) return; // Podczas alarmu nie nadpisuj ekranu decyzji
+
+  lcd.setCursor(0, 0);
+  lcd.print("Kat: "); lcd.print(radarAngle); lcd.print("deg   ");
   
-  if (w.getMoving()) {
-    int tmp = w.distance - w.distanceTravelled;
-    if(lastDist != tmp || lastMode != 1){
-      lcd.setCursor(0, 0); lcd.print("Dystans:    cm  ");
-      lcd.setCursor(9, 0); lcd.print(tmp);
-      lastDist = tmp; lastMode = 1;
-    }
-  } else if (w.getTurning()) {
-    if (lastMode != 2) { lcd.setCursor(0, 0); lcd.print("Status: OBROT    "); lastMode = 2; }
+  lcd.setCursor(0, 1);
+  lcd.print("Dyst: ");
+  if(currentDist == 400) {
+    lcd.print("CLEAR   ");
   } else {
-    if (lastMode != 0) { lcd.setCursor(0, 0); lcd.print("Status: STOP     "); lastMode = 0; }
+    lcd.print(currentDist); lcd.print("cm    ");
   }
 }
 
-// Aktualizacja prędkości w rogach LCD
 void speedChange() {
   int sl = 0, sr = 0;
   if (w.getMoving()) {
@@ -149,82 +134,48 @@ void speedChange() {
     if (w.getLeft()) sl *= -1; else sr *= -1;
   }
   if(lastSpeedRight != sr || lastSpeedLeft != sl){
-    lcd.setCursor(0, 1); lcd.print("    "); lcd.setCursor(0, 1); lcd.print(sl);
-    lcd.setCursor(12, 1); lcd.print("    "); lcd.setCursor(12, 1); lcd.print(sr);
+    // Wyświetlanie prędkości na skrajach ekranu, jeśli jest taka potrzeba
     lastSpeedLeft = sl; lastSpeedRight = sr;
   }
 }
 
-// Dynamiczne strzałki / Kierunkowskazy na środku LCD
-void animation() {
-  if (obstacleDetected) return;
-  lcd.setCursor(7, 1);
-  if(w.getMoving()){
-    lcd.createChar(0, current);
-    lcd.write(byte(0)); lcd.write(byte(0));
-    if (w.getForw()) { shiftUp(current, frame); memcpy(current, frame, 8); } 
-    else { shiftDown(current, frame); memcpy(current, frame, 8); }
-  } else if(w.getTurning()){
-    static bool flash = false;
-    flash = !flash;
-    if (flash) {
-      lcd.createChar(1, w.getLeft() ? arrowLeft : arrowRight);
-      lcd.write(byte(1)); lcd.write(byte(1));
-    } else { lcd.print("  "); }
-  } else { lcd.print("--"); }
-}
-
 void setup() {
-  // Piny Sonaru
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
 
   Serial.begin(9600);
   
-  // Inicjalizacja kół (Piny: R_forward, R_back, R_speed, L_forward, L_back, L_speed)
+  // Konfiguracja kół
   w.attach(11, 12, 6, 8, 7, 5);
-  Blinker::begin(13); // Głośnik na pinie 13
+  Blinker::begin(13); 
   SpeedSensor::begin();
   
   lcd.init();
   lcd.backlight();
   
   serwo.attach(SERVO);
-  serwo.write(90); // Ustawienie radaru na wprost
+  serwo.write(90); 
   
-  lastMove = millis() + 1000; // Pierwsza sekunda bezpiecznego postoju
+  delay(1000);
+  
+  // URUCHOMIENIE AUTKA: Automatycznie rusza przed siebie po włączeniu zasilania
+  w.setSpeed(140);
+  w.goForward(999); // Komenda dalekiej jazdy, sterowanej teraz przez sztuczną inteligencję sonaru
 }
 
 void loop() {
-  // Wywołanie asynchronicznych stoperów sprzętu i interfejsu
   ticker.check();
   speedTicker.check();
-  animationTicker.check();
-  radarTicker.check(); // Silnik radaru działa bezustannie w tle
+  radarTicker.check(); 
 
-  // Strażnicy asynchronicznych pomiarów odległości kół i kątów
   w.moveStep();
   w.turnStep();
 
-  // Automat sekwencyjny (taniec robota) - działa tylko gdy brak awarii sonaru
-  /*if(!obstacleDetected && (millis() - lastMove > interval)){
-    switch(fr){
-      case 0: w.turnLeft(90); break;
-      case 1: w.setSpeed(130); w.goBack(50); startLineAnimation(false); break;
-      case 2: w.turnRight(90); break;
-      case 3: w.setSpeed(250); w.goBack(50); startLineAnimation(false); break;
-    }
-    fr = (fr + 1) % 4;
-    lastMove = millis();
-  }*/
-
-  // Obsługa komend awaryjnych z Serial Monitora
-  if (Serial.available()) {
-    cmd = Serial.read();
-    switch (cmd) {
-      case 'w': w.setSpeed(150); w.goForward(400); startLineAnimation(true); break;
-      case 'x': w.setSpeed(150); w.back(); startLineAnimation(false); break;
-      case 's': w.stop(); break;
-    }
+  // PUNKT: Kontynuowanie jazdy po zakończeniu manewru omijania
+  if (obstacleDetected && !w.getTurning() && (millis() - lastMove > 1500)) {
+    obstacleDetected = false; 
+    lcd.clear();
+    w.setSpeed(140);
+    w.goForward(999); // Skręt wykonany, droga czysta -> jedź dalej przed siebie!
   }
 }
