@@ -63,7 +63,6 @@ void scanRadar() {
   currentDist = getSonarDistance();
 
   // REAKCJA ANTYKOLIZYJNA: 
-  // Jeśli robot jedzie do przodu, sonar patrzy wprost (między 70 a 110 stopni) i wykryje coś bliżej niż 25cm:
   if (w.getMoving() && w.getForw() && radarAngle >= 70 && radarAngle <= 110 && currentDist < 25) {
     
     w.stop(); // Natychmiast zatrzymaj silniki
@@ -71,36 +70,49 @@ void scanRadar() {
     lcd.clear();
     lcd.setCursor(0, 0); lcd.print("OBIEKT! SKANUJE");
     
-    // PROCEDURA ROZEJRZENIA SIĘ (Zatrzymujemy na chwilę całe Arduino za pomocą delay)
-    serwo.write(30); delay(400); unsigned int leftSpace = getSonarDistance();
-    serwo.write(150); delay(400); unsigned int rightSpace = getSonarDistance();
+    // PROCEDURA ROZEJRZENIA SIĘ
+    serwo.write(30); delay(500); unsigned int leftSpace = getSonarDistance();
+    serwo.write(150); delay(500); unsigned int rightSpace = getSonarDistance();
     
-    // Ustalamy kierunek ucieczki
     lcd.clear();
     lcd.setCursor(0, 0); lcd.print("WYBRANA DROGA:");
     
+    // RĘCZNE WYMUSZENIE SKRĘTU CZASOWEGO (Niezależne od enkoderów)
     if(leftSpace > rightSpace) {
       lcd.setCursor(0, 1); lcd.print(">>> LEWO <<<");
-      w.setSpeed(160);
-      w.turnLeft(50); // Skręć o określoną liczbę impulsów/kąt
+      w.setSpeedLeft(160);  w.setSpeedRight(160);
+      // Aby skręcić w lewo: lewe koła w tył, prawe koła w przód
+      analogWrite(6, 0);   // Lewy przód STOP
+      analogWrite(8, 160); // Lewy tył START
+      analogWrite(7, 160); // Prawy przód START
+      analogWrite(5, 0);   // Prawy tył STOP
     } else {
       lcd.setCursor(0, 1); lcd.print(">>> PRAWO <<<");
-      w.setSpeed(160);
-      w.turnRight(50); 
+      w.setSpeedLeft(160);  w.setSpeedRight(160);
+      // Aby skręcić w prawo: lewe koła w przód, prawe koła w tył
+      analogWrite(6, 160); // Lewy przód START
+      analogWrite(8, 0);   // Lewy tył STOP
+      analogWrite(7, 0);   // Prawy przód STOP
+      analogWrite(5, 160); // Prawy tył START
     }
     
-    // Czekamy chwilę, aż robot wykona ten fizyczny manewr skrętu (np. 800 milisekund)
-    delay(800); 
+    // Czas trwania fizycznego skrętu (600 ms). 
+    // Jeśli robot skręca za mało, zwiększ do 800. Jeśli za dużo, zmniejsz do 400.
+    delay(600); 
     
-    // PO SKRĘCIE: Wymuszamy wyprostowanie i powrót do jazdy naprzód
+    w.stop(); // Zakończ manewr skręcania
+    delay(100);
+    
+    // PO SKRĘCIE: Wymuszamy natychmiastowy powrót do jazdy i odblokowanie serwa
     serwo.write(90);
     radarAngle = 90;
     lcd.clear();
     
+    // Ruszamy ponownie przed siebie za pomocą biblioteki
     w.setSpeed(140);
     w.goForward(999); 
     
-    return; // Kończymy tę pętlę radaru w tym miejscu
+    return; 
   }
 
   // Zwykły ruch wahadłowy serwa (wykonuje się zawsze, gdy droga jest czysta)
@@ -112,7 +124,6 @@ void scanRadar() {
 
 // Wyświetlanie danych z sonaru w czasie rzeczywistym
 void updateLCD() {
-  // Jeśli robot akurat nie stoi w miejscu i nie wypisuje wybranej drogi, pokazuj parametry
   if (w.getMoving() && w.getForw()) {
     lcd.setCursor(0, 0);
     lcd.print("Kat: "); lcd.print(radarAngle); lcd.print("deg   ");
@@ -146,6 +157,8 @@ void setup() {
   pinMode(ECHO, INPUT);
   Serial.begin(9600);
   
+  // Konfiguracja pinów silników w bibliotece:
+  // pins: forward Left, backward Left, forward Right, backward Right, plus piny enable/speed (7 i 5)
   w.attach(11, 12, 6, 8, 7, 5);
   Blinker::begin(13); 
   SpeedSensor::begin();
@@ -163,12 +176,11 @@ void setup() {
 }
 
 void loop() {
-  // Wywołania stoperów
   ticker.check();
   speedTicker.check();
   radarTicker.check(); 
 
-  // Strażnicy pracy silników
+  // Te funkcje muszą być, ale nie będą już blokować powrotu do jazdy
   w.moveStep();
   w.turnStep();
 }
