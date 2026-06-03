@@ -6,21 +6,24 @@
 #include "Blinker.h"
 #include "SpeedSensor.h"
 
-// Upewnij się, że te piny są poprawne dla Twojego shielda!
+
 #define TRIG 9
 #define ECHO 10
 #define SERVO 3
 
-LiquidCrystal_I2C lcd(0x27, 16, 2); 
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 Wheels w;
 Servo serwo;
 
 int lastSpeedLeft = 0, lastSpeedRight = 0;
+unsigned long lastMove = 0;
 
 // Zmienne echoradaru
 int radarAngle = 90;
 int radarDirection = 15; 
+bool obstacleDetected = false;
 unsigned int currentDist = 400;
+
 
 class Ticker {
   private: 
@@ -42,7 +45,7 @@ void scanRadar();
 
 Ticker ticker(100, updateLCD);       // Odświeżanie ekranu co 100ms
 Ticker speedTicker(32, speedChange);
-Ticker radarTicker(50, scanRadar);    // Skanowanie otoczenia co 50ms
+Ticker radarTicker(50, scanRadar);    // Skanowanie otoczenia co 60ms
 
 // Funkcja pomiaru odległości
 unsigned int getSonarDistance() {
@@ -58,64 +61,47 @@ unsigned int getSonarDistance() {
 
 // Funkcja skanowania przestrzeni
 void scanRadar() {
-  // Fizyczny ruch serwa o kolejny krok
+  if (obstacleDetected) return; 
+
   serwo.write(radarAngle);
   currentDist = getSonarDistance();
 
-  // REAKCJA ANTYKOLIZYJNA: 
-  if (w.getMoving() && w.getForw() && radarAngle >= 70 && radarAngle <= 110 && currentDist < 25) {
-    
-    w.stop(); // Natychmiast zatrzymaj silniki
+  
+  Serial.print("Angle:"); Serial.print(radarAngle); Serial.print(",");
+  Serial.print("Distance:"); Serial.println(currentDist);
+
+  
+  if (w.getMoving() && w.getForw() && radarAngle >= 70 && radarAngle <= 110 && currentDist < 30) {
+    w.stop(); 
+    obstacleDetected = true; // Flaga blokady
     
     lcd.clear();
     lcd.setCursor(0, 0); lcd.print("OBIEKT! SKANUJE");
     
-    // PROCEDURA ROZEJRZENIA SIĘ
+    // Szybkie rozejrzenie się na boki
     serwo.write(30); delay(500); unsigned int leftSpace = getSonarDistance();
     serwo.write(150); delay(500); unsigned int rightSpace = getSonarDistance();
+    serwo.write(90); delay(200); // Powrót na wprost
     
     lcd.clear();
     lcd.setCursor(0, 0); lcd.print("WYBRANA DROGA:");
     
-    // RĘCZNE WYMUSZENIE SKRĘTU CZASOWEGO (Niezależne od enkoderów)
+    // Podjęcie decyzji i uruchomienie skrętu kół
     if(leftSpace > rightSpace) {
       lcd.setCursor(0, 1); lcd.print(">>> LEWO <<<");
-      w.setSpeedLeft(160);  w.setSpeedRight(160);
-      // Aby skręcić w lewo: lewe koła w tył, prawe koła w przód
-      analogWrite(6, 0);   // Lewy przód STOP
-      analogWrite(8, 160); // Lewy tył START
-      analogWrite(7, 160); // Prawy przód START
-      analogWrite(5, 0);   // Prawy tył STOP
+      w.setSpeed(160);
+      w.turnLeft(60); 
     } else {
       lcd.setCursor(0, 1); lcd.print(">>> PRAWO <<<");
-      w.setSpeedLeft(160);  w.setSpeedRight(160);
-      // Aby skręcić w prawo: lewe koła w przód, prawe koła w tył
-      analogWrite(6, 160); // Lewy przód START
-      analogWrite(8, 0);   // Lewy tył STOP
-      analogWrite(7, 0);   // Prawy przód STOP
-      analogWrite(5, 160); // Prawy tył START
+      w.setSpeed(160);
+      w.turnRight(60); 
     }
     
-    // Czas trwania fizycznego skrętu (600 ms). 
-    // Jeśli robot skręca za mało, zwiększ do 800. Jeśli za dużo, zmniejsz do 400.
-    delay(600); 
-    
-    w.stop(); // Zakończ manewr skręcania
-    delay(100);
-    
-    // PO SKRĘCIE: Wymuszamy natychmiastowy powrót do jazdy i odblokowanie serwa
-    serwo.write(90);
-    radarAngle = 90;
-    lcd.clear();
-    
-    // Ruszamy ponownie przed siebie za pomocą biblioteki
-    w.setSpeed(140);
-    w.goForward(999); 
-    
-    return; 
+    lastMove = millis(); // Zapamiętaj czas rozpoczęcia manewru
+    return;
   }
 
-  // Zwykły ruch wahadłowy serwa (wykonuje się zawsze, gdy droga jest czysta)
+  // Ruch wahadłowy serwa
   radarAngle += radarDirection;
   if (radarAngle >= 160 || radarAngle <= 20) {
     radarDirection = -radarDirection; 
@@ -124,17 +110,17 @@ void scanRadar() {
 
 // Wyświetlanie danych z sonaru w czasie rzeczywistym
 void updateLCD() {
-  if (w.getMoving() && w.getForw()) {
-    lcd.setCursor(0, 0);
-    lcd.print("Kat: "); lcd.print(radarAngle); lcd.print("deg   ");
-    
-    lcd.setCursor(0, 1);
-    lcd.print("Dyst: ");
-    if(currentDist == 400) {
-      lcd.print("CLEAR   ");
-    } else {
-      lcd.print(currentDist); lcd.print("cm    ");
-    }
+  if (obstacleDetected) return; // Podczas alarmu i skręcania nie nadpisuj ekranu decyzji
+
+  lcd.setCursor(0, 0);
+  lcd.print("Kat: "); lcd.print(radarAngle); lcd.print("deg   ");
+  
+  lcd.setCursor(0, 1);
+  lcd.print("Dyst: ");
+  if(currentDist == 400) {
+    lcd.print("CLEAR   ");
+  } else {
+    lcd.print(currentDist); lcd.print("cm    ");
   }
 }
 
@@ -157,8 +143,6 @@ void setup() {
   pinMode(ECHO, INPUT);
   Serial.begin(9600);
   
-  // Konfiguracja pinów silników w bibliotece:
-  // pins: forward Left, backward Left, forward Right, backward Right, plus piny enable/speed (7 i 5)
   w.attach(11, 12, 6, 8, 7, 5);
   Blinker::begin(13); 
   SpeedSensor::begin();
@@ -170,17 +154,33 @@ void setup() {
   serwo.write(90); 
   delay(1000);
   
-  // Start robota
+  // Pierwsze uruchomienie robota - jedzie przed siebie
   w.setSpeed(140);
   w.goForward(999); 
 }
 
 void loop() {
+  // Wywołania stoperów
   ticker.check();
   speedTicker.check();
   radarTicker.check(); 
 
-  // Te funkcje muszą być, ale nie będą już blokować powrotu do jazdy
+  // Strażnicy pracy silników (zliczanie enkoderów)
   w.moveStep();
   w.turnStep();
+
+  if(obstacleDetected){
+    serwo.write(90);
+  }
+
+  if (obstacleDetected && (millis() - lastMove > 1000)) {
+    serwo.write(90); 
+    w.stop();
+    lcd.clear();              
+    obstacleDetected = false; 
+    
+    
+    w.setSpeed(140);
+    w.goForward(999); 
+  }
 }
