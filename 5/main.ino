@@ -6,9 +6,9 @@
 #include "Blinker.h"
 #include "SpeedSensor.h"
 
-// Przypisanie pinów zgodnie z Twoim shieldem (zieloną płytką)
-#define TRIG 9
-#define ECHO 10
+// Piny sygnałowe (Dostosuj A4/A5 lub 9/10 zależnie od swojej płytki)
+#define TRIG A4
+#define ECHO A5
 #define SERVO 3
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -16,17 +16,15 @@ Wheels w;
 Servo serwo;
 
 int lastSpeedLeft = 0, lastSpeedRight = 0;
-int lastDist = 0, lastMode = -1; 
 unsigned long lastMove = 0;
-char cmd;
 
-// Obsługa radaru
+// Zmienne echoradaru
 int radarAngle = 90;
-int radarDirection = 15; // Zwiększony krok dla żywszego omiatania
+int radarDirection = 15; 
 bool obstacleDetected = false;
 unsigned int currentDist = 400;
 
-// Klasa Ticker do wielozadaniowości
+// Klasa Ticker do asynchroniczności
 class Ticker {
   private: 
     unsigned long period;
@@ -45,10 +43,11 @@ void updateLCD();
 void speedChange();
 void scanRadar();
 
-Ticker ticker(100, updateLCD);     // Odświeżanie ekranu co 100ms
+Ticker ticker(100, updateLCD);       // Odświeżanie ekranu co 100ms
 Ticker speedTicker(32, speedChange);
-Ticker radarTicker(60, scanRadar);  // Skanowanie otoczenia co 60ms
+Ticker radarTicker(60, scanRadar);    // Skanowanie otoczenia co 60ms
 
+// Funkcja pomiaru odległości
 unsigned int getSonarDistance() {
   digitalWrite(TRIG, LOW);
   delayMicroseconds(2);
@@ -60,57 +59,58 @@ unsigned int getSonarDistance() {
   return tot / 58;
 }
 
+// Funkcja skanowania przestrzeni
 void scanRadar() {
-  if (obstacleDetected) return; // Jeśli trwa procedura omijania, zawieś wahadło
+  if (obstacleDetected) return; // Jeśli trwa manewr omijania, zatrzymaj ruch wahadła
 
   serwo.write(radarAngle);
   currentDist = getSonarDistance();
 
-  // Wysyłanie danych na Serial Plotter
+  // Wykres w Serial Plotterze
   Serial.print("Angle:"); Serial.print(radarAngle); Serial.print(",");
   Serial.print("Distance:"); Serial.println(currentDist);
 
-  // REAKCJA ANTYKOLIZYJNA: Robot jedzie w przód i widzi przeszkodę < 25cm na wprost (70-110 stopni)
+  // REAKCJA ANTYKOLIZYJNA (Jazda w przód + obiekt < 25cm na wprost)
   if (w.getMoving() && w.getForw() && radarAngle >= 70 && radarAngle <= 110 && currentDist < 25) {
     w.stop(); 
-    obstacleDetected = true;
+    obstacleDetected = true; // Flaga blokady
     
-    // PUNKT: Podejmowanie decyzji (Skanowanie stron)
     lcd.clear();
-    lcd.setCursor(0, 0); lcd.print("OBIEKT! SKANUJĘ");
+    lcd.setCursor(0, 0); lcd.print("OBIEKT! SKANUJE");
     
+    // Szybkie rozejrzenie się na boki
     serwo.write(30); delay(500); unsigned int leftSpace = getSonarDistance();
     serwo.write(150); delay(500); unsigned int rightSpace = getSonarDistance();
-    serwo.write(90); delay(200); // Powrót sonaru na wprost
+    serwo.write(90); delay(200); // Powrót na wprost
     
     lcd.clear();
     lcd.setCursor(0, 0); lcd.print("WYBRANA DROGA:");
     
-    // PUNKT: Realizacja manewru ucieczki na podstawie decyzji
+    // Podjęcie decyzji i uruchomienie skrętu kół
     if(leftSpace > rightSpace) {
       lcd.setCursor(0, 1); lcd.print(">>> LEWO <<<");
       w.setSpeed(160);
-      w.turnLeft(60); // Fizyczny skręt w lewo o bezpieczny kąt
+      w.turnLeft(60); 
     } else {
       lcd.setCursor(0, 1); lcd.print(">>> PRAWO <<<");
       w.setSpeed(160);
-      w.turnRight(60); // Fizyczny skręt w prawo
+      w.turnRight(60); 
     }
     
-    lastMove = millis(); // Zapamiętaj czas rozpoczęcia skrętu
+    lastMove = millis(); // Zapamiętaj czas rozpoczęcia manewru
     return;
   }
 
-  // Ruch wahadłowy radaru
+  // Ruch wahadłowy serwa
   radarAngle += radarDirection;
   if (radarAngle >= 160 || radarAngle <= 20) {
     radarDirection = -radarDirection; 
   }
 }
 
-// PUNKT: Wyświetlanie danych z sonaru (Kąt i odległość) na LCD w czasie rzeczywistym
+// Wyświetlanie danych z sonaru w czasie rzeczywistym
 void updateLCD() {
-  if (obstacleDetected) return; // Podczas alarmu nie nadpisuj ekranu decyzji
+  if (obstacleDetected) return; // Podczas alarmu i skręcania nie nadpisuj ekranu decyzji
 
   lcd.setCursor(0, 0);
   lcd.print("Kat: "); lcd.print(radarAngle); lcd.print("deg   ");
@@ -134,7 +134,6 @@ void speedChange() {
     if (w.getLeft()) sl *= -1; else sr *= -1;
   }
   if(lastSpeedRight != sr || lastSpeedLeft != sl){
-    // Wyświetlanie prędkości na skrajach ekranu, jeśli jest taka potrzeba
     lastSpeedLeft = sl; lastSpeedRight = sr;
   }
 }
@@ -142,10 +141,8 @@ void speedChange() {
 void setup() {
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
-
   Serial.begin(9600);
   
-  // Konfiguracja kół
   w.attach(11, 12, 6, 8, 7, 5);
   Blinker::begin(13); 
   SpeedSensor::begin();
@@ -155,27 +152,31 @@ void setup() {
   
   serwo.attach(SERVO);
   serwo.write(90); 
-  
   delay(1000);
   
-  // URUCHOMIENIE AUTKA: Automatycznie rusza przed siebie po włączeniu zasilania
+  // Pierwsze uruchomienie robota - jedzie przed siebie
   w.setSpeed(140);
-  w.goForward(999); // Komenda dalekiej jazdy, sterowanej teraz przez sztuczną inteligencję sonaru
+  w.goForward(999); 
 }
 
 void loop() {
+  // Wywołania stoperów
   ticker.check();
   speedTicker.check();
   radarTicker.check(); 
 
+  // Strażnicy pracy silników (zliczanie enkoderów)
   w.moveStep();
   w.turnStep();
 
-  // PUNKT: Kontynuowanie jazdy po zakończeniu manewru omijania
-  if (obstacleDetected && !w.getTurning() && (millis() - lastMove > 1500)) {
-    obstacleDetected = false; 
-    lcd.clear();
+  // --- AUTOMATYCZNY POWRÓT DO JAZDY PO SKRĘCIE ---
+  // Jeśli wykryto przeszkodę, ale koła przestały już skręcać (i minęło min. 500ms dla bezpieczeństwa)
+  if (obstacleDetected && !w.getTurning() && (millis() - lastMove > 500)) {
+    lcd.clear();              // Czyścimy ekran z napisu "WYBRANA DROGA" (tylko raz!)
+    obstacleDetected = false; // Wyłączamy flagę alarmu - to automatycznie włącza updateLCD() i ruch serwa
+    
+    // Nakazujemy robotowi ponowną jazdę przed siebie
     w.setSpeed(140);
-    w.goForward(999); // Skręt wykonany, droga czysta -> jedź dalej przed siebie!
+    w.goForward(999); 
   }
 }
