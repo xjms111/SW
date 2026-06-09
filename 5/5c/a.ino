@@ -200,9 +200,6 @@ void loop() {
   w.moveStep();
   w.turnStep();
 
-  if(obstacleDetected){
-    serwo.write(90);
-  }
 
   if (obstacleDetected && !w.getTurning()) {
 
