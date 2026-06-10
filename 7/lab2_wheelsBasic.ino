@@ -14,9 +14,7 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 Wheels w;
 Servo serwo;
 
-// =====================================================
 // PARAMETRY MODELU SPREZYNY
-// =====================================================
 
 const int TARGET_DISTANCE = 100;   // punkt rownowagi: 100 cm
 const int DEAD_ZONE = 5;           // tolerancja +/- 5 cm
@@ -27,9 +25,7 @@ const int MAX_PWM = 210;           // maksymalna moc
 const float KP = 2.0;              // "twardosc sprezyny"
 const float KD = 5.0;              // tlumienie, ogranicza oscylacje
 
-// =====================================================
 // ZMIENNE POMIAROWE
-// =====================================================
 
 unsigned int currentDist = 400;
 unsigned int rawDist = 400;
@@ -44,9 +40,6 @@ bool firstMeasurement = true;
 int driveDirection = 0;
 int currentPWM = 0;
 
-// =====================================================
-// TICKER
-// =====================================================
 
 class Ticker {
   private:
@@ -74,25 +67,16 @@ class Ticker {
     }
 };
 
-// =====================================================
-// DEKLARACJE FUNKCJI
-// =====================================================
 
 void updateLCD();
 void springControl();
 void applyMotorCommand(int command);
 unsigned int getSonarDistance();
 
-// =====================================================
-// TICKERY
-// =====================================================
 
 Ticker lcdTicker(200, updateLCD);
 Ticker controlTicker(100, springControl);
 
-// =====================================================
-// POMIAR ODLEGLOSCI
-// =====================================================
 
 unsigned int getSonarDistance() {
   digitalWrite(TRIG, LOW);
@@ -112,12 +96,6 @@ unsigned int getSonarDistance() {
   return tot / 58;
 }
 
-// =====================================================
-// STEROWANIE SILNIKAMI
-// command > 0  -> jazda do przodu
-// command < 0  -> cofanie
-// command == 0 -> stop
-// =====================================================
 
 void applyMotorCommand(int command) {
 
@@ -146,8 +124,6 @@ void applyMotorCommand(int command) {
 
   } else {
 
-    // Nie uzywamy w.back(), bo tam wlacza sie Blinker na TimerOne.
-    // Servo tez korzysta z timera, wiec bezpieczniej sterowac kolami bez buzzera.
     w.backLeft();
     w.backRight();
 
@@ -155,9 +131,6 @@ void applyMotorCommand(int command) {
   }
 }
 
-// =====================================================
-// MODEL SPREZYNY HOOKE'A
-// =====================================================
 
 void springControl() {
 
@@ -225,9 +198,6 @@ void springControl() {
   Serial.println(driveDirection);
 }
 
-// =====================================================
-// LCD
-// =====================================================
 
 void updateLCD() {
 
@@ -257,9 +227,6 @@ void updateLCD() {
   }
 }
 
-// =====================================================
-// SETUP
-// =====================================================
 
 void setup() {
 
@@ -293,9 +260,6 @@ void setup() {
   Serial.println("Start modelu sprezyny Hooke'a");
 }
 
-// =====================================================
-// LOOP
-// =====================================================
 
 void loop() {
 
