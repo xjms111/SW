@@ -9,7 +9,7 @@
 
 #define TRIG 9
 #define ECHO 10
-#define SERVO 3
+#define SERVO 2
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 Wheels w;
@@ -54,7 +54,7 @@ unsigned int getSonarDistance() {
   digitalWrite(TRIG, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG, LOW);
-  unsigned long tot = pulseIn(ECHO, HIGH, 25000); 
+  unsigned long tot = pulseIn(ECHO, HIGH, 12000); 
   if (tot == 0) return 400; 
   return tot / 58;
 }
@@ -87,6 +87,7 @@ void scanRadar() {
       w.stop();
 
       obstacleDetected = true;
+      serwo.attach(SERVO);
 
       lcd.clear();
       lcd.setCursor(0, 0);
@@ -106,6 +107,7 @@ void scanRadar() {
       serwo.write(90);
       delay(200);
 
+      serwo.detach();
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print("WYBRANA DROGA:");
@@ -126,7 +128,8 @@ void scanRadar() {
         w.setSpeed(160);
         w.turnRight(60);
       }
-
+    
+      delay(150);
       return;
     }
   }
@@ -174,7 +177,7 @@ void setup() {
   pinMode(ECHO, INPUT);
   Serial.begin(9600);
   
-  w.attach(11, 12, 6, 7, 8, 5);
+  w.attach(13, 12, 6, 7, 8, 5);
   Blinker::begin(13); 
   SpeedSensor::begin();
   
