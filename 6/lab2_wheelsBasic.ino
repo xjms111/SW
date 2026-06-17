@@ -19,12 +19,6 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 Wheels w;
 Servo serwo;
 
-// =====================================================
-// KODY PILOTA — DOSTOSUJ PO ODCZYCIE Z SERIAL MONITORA
-// =====================================================
-
-// Popularny pilot IR NEC z przyciskami strzalek.
-// Jesli Twoj pilot zwraca inne wartosci, zmien tylko te stale.
 
 const uint8_t IR_UP       = 0x18;
 const uint8_t IR_DOWN     = 0x52;
@@ -57,17 +51,13 @@ const uint8_t IR_VOL_MINUS = 0x07;
 const uint8_t IR_VOL_PLUS  = 0x15;
 const uint8_t IR_EQ        = 0x09;
 
-// =====================================================
 // PIN STARTOWY
-// =====================================================
 
 const char CORRECT_PIN[] = "1234";
 char enteredPin[8];
 byte enteredPinLength = 0;
 
-// =====================================================
 // TRYBY PRACY
-// =====================================================
 
 enum RobotMode {
   MODE_MANUAL,
@@ -76,9 +66,7 @@ enum RobotMode {
 
 RobotMode robotMode = MODE_MANUAL;
 
-// =====================================================
 // PARAMETRY MODELU SPREZYNY
-// =====================================================
 
 int targetDistance = 100;          // punkt rownowagi: 100 cm
 const int DEAD_ZONE = 5;           // tolerancja +/- 5 cm
@@ -108,9 +96,7 @@ int driveDirection = 0;
 int currentPWM = 0;
 int manualSpeed = 150;
 
-// =====================================================
 // IR — CALLBACK
-// =====================================================
 
 volatile bool irDataReady = false;
 volatile uint8_t lastIRCommand = 0;
@@ -149,9 +135,7 @@ class Ticker {
     }
 };
 
-// =====================================================
 // DEKLARACJE FUNKCJI
-// =====================================================
 
 void updateLCD();
 void springControl();
