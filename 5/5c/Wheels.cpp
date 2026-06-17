@@ -39,12 +39,12 @@ void Wheels::forward() { this->forwardLeft(); this->forwardRight(); }
 void Wheels::back() {
     this->backLeft(); this->backRight();
     long int tmp = this->getPeriod();
-    Blinker::start(tmp);
+    //Blinker::start(tmp);
 }
 
 void Wheels::stopLeft() { SET_MOVEMENT(pinsLeft, LOW, LOW); }
 void Wheels::stopRight() { SET_MOVEMENT(pinsRight, LOW, LOW); }
-void Wheels::stop() { this->stopLeft(); this->stopRight(); Blinker::stop(); }
+void Wheels::stop() { this->stopLeft(); this->stopRight(); //Blinker::stop(); }
 
 void Wheels::moveStep() {
     if(!moving) return;
