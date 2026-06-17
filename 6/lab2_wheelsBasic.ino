@@ -77,9 +77,9 @@ const int MAX_PWM = 220;           // maksymalna moc
 const float KP = 2.0;              // "twardosc sprezyny"
 const float KD = 5.0;              // tlumienie
 
-// =====================================================
+
 // ZMIENNE POMIAROWE
-// =====================================================
+
 
 unsigned int currentDist = 400;
 unsigned int rawDist = 400;
@@ -105,9 +105,9 @@ volatile uint32_t lastIRRawData = 0;
 
 void ReceiveCompleteCallbackHandler();
 
-// =====================================================
+
 // TICKER
-// =====================================================
+
 
 class Ticker {
   private:
@@ -155,16 +155,15 @@ void handlePINCommand(uint8_t command);
 char commandToDigit(uint8_t command);
 void printIRCode(uint8_t command, uint8_t flags, uint32_t rawData);
 
-// =====================================================
+
 // TICKERY
-// =====================================================
+
 
 Ticker lcdTicker(200, updateLCD);
 Ticker controlTicker(100, springControl);
 
-// =====================================================
+
 // POMIAR ODLEGLOSCI
-// =====================================================
 
 unsigned int getSonarDistance() {
   digitalWrite(TRIG, LOW);
@@ -184,9 +183,7 @@ unsigned int getSonarDistance() {
   return tot / 58;
 }
 
-// =====================================================
 // STEROWANIE SILNIKAMI
-// =====================================================
 
 void stopRobot() {
   w.stop();
@@ -209,8 +206,6 @@ void manualBack() {
 
   w.setSpeed(manualSpeed);
 
-  // Nie uzywam w.back(), bo w Twojej klasie uruchamia Blinker na TimerOne.
-  // Servo tez korzysta z timerow, wiec bezpieczniej cofac bez blinkera.
   w.backLeft();
   w.backRight();
 
